@@ -55,8 +55,7 @@ func initTracer(ctx context.Context) (func(context.Context) error, error) {
 	var exporter trace.SpanExporter
 	var err error
 
-	// Retry logic
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		exporter, err = otlptracegrpc.New(ctx,
 			otlptracegrpc.WithEndpoint(endpoint),
 			otlptracegrpc.WithInsecure(),

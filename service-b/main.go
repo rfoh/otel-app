@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"time"
+	"unicode"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -18,7 +19,25 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
+
+func removeAccents(s string) string {
+	t := transform.Chain(norm.NFD, transform.RemoveFunc(func(r rune) bool {
+		return unicode.Is(unicode.Mn, r)
+	}))
+	result, _, _ := transform.String(t, s)
+	return result
+}
+
+func formatCityName(s string) string {
+	// Remove acentos
+	s = removeAccents(s)
+	// Substitui espacos por underline
+	s = regexp.MustCompile(`\s+`).ReplaceAllString(s, "_")
+	return s
+}
 
 var cepRegex = regexp.MustCompile(`^[0-9]{8}$`)
 
@@ -34,7 +53,7 @@ type weatherResponse struct {
 
 type viaCepResponse struct {
 	Localidade string `json:"localidade"`
-	Erro       bool   `json:"erro"`
+	Erro       string `json:"erro"`
 }
 
 type outputPayload struct {
@@ -76,8 +95,7 @@ func initTracer(ctx context.Context) (func(context.Context) error, error) {
 	var exporter trace.SpanExporter
 	var err error
 
-	// Retry logic
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		exporter, err = otlptracegrpc.New(ctx,
 			otlptracegrpc.WithEndpoint(endpoint),
 			otlptracegrpc.WithInsecure(),
@@ -143,6 +161,7 @@ func zipcodeHandler(w http.ResponseWriter, r *http.Request) {
 	celsius, err := fetchTemperature(r.Context(), city)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
+		writeJSON(w, map[string]string{"message": err.Error()})
 		return
 	}
 
@@ -185,11 +204,11 @@ func fetchCity(ctx context.Context, cep string) (string, error) {
 		return "", err
 	}
 
-	if v.Erro || v.Localidade == "" {
+	if v.Erro == "true" || v.Localidade == "" {
 		return "", errZipcodeNotFound
 	}
 
-	return v.Localidade, nil
+	return formatCityName(v.Localidade), nil
 }
 
 func fetchTemperature(ctx context.Context, city string) (float64, error) {
@@ -209,7 +228,7 @@ func fetchTemperature(ctx context.Context, city string) (float64, error) {
 		return 0, err
 	}
 
-	client := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport), Timeout: 10 * time.Second}
+	client := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport), Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err

@@ -1,0 +1,39 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Service A",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/service-a",
+            "env": {
+                "SERVICE_B_URL": "http://localhost:8081",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "localhost:4317"
+            },
+            "args": [],
+            "showLog": true
+        },
+        {
+            "name": "Service B",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/service-b",
+            "env": {
+                "WEATHERAPI_KEY": "0c71c7b81c30465eaec172748252812",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "localhost:4317"
+            },
+            "args": [],
+            "showLog": true
+        }
+    ],
+    "compounds": [
+        {
+            "name": "All Services",
+            "configurations": ["Service B", "Service A"],
+            "stopOnEntry": false,
+            "preLaunchTask": "docker:start"
+        }
+    ]
+}
