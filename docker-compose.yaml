@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    ports:
+      - "9411:9411"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9411/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  service-b:
+    build:
+      context: ./service-b
+    image: otel-apps-service-b:latest
+    environment:
+      - WEATHERAPI_KEY=0c71c7b81c30465eaec172748252812
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+    ports:
+      - "8081:8081"
+    depends_on:
+      - otel-collector
+
+  service-a:
+    build:
+      context: ./service-a
+    image: otel-apps-service-a:latest
+    environment:
+      - SERVICE_B_URL=http://service-b:8081
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+    ports:
+      - "8080:8080"
+    depends_on:
+      - service-b
+      - otel-collector
